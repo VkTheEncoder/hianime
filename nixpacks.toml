@@ -1,9 +1,17 @@
 # nixpacks.toml
+
 [project]
 name = "hls-telegram-bot"
 
 [phases.setup]
-nixPkgs = ["ffmpeg"]      # install ffmpeg so your bot's ffmpeg calls work
+nixPkgs = ["python3", "ffmpeg"]
+
+[phases.install]
+cmds = [
+  # activate the venv that Nixpacks created at /opt/venv
+  "source /opt/venv/bin/activate",
+  "pip install -r requirements.txt"
+]
 
 [start]
-cmd = "python bot.py"     # what gets run when the container starts
+cmd = "python bot.py"
