@@ -2,17 +2,21 @@
 import os
 import subprocess
 from dotenv import load_dotenv
-from telegram import Update
+from telegram import Bot, Update
 from telegram.ext import Updater, CommandHandler, CallbackContext
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # ─── Load & validate BOT_TOKEN ────────────────────────────────────────────────
-load_dotenv()
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+load_dotenv()                        
+BOT_TOKEN = os.getenv("BOT_TOKEN")  
 if not BOT_TOKEN:
     raise RuntimeError("BOT_TOKEN is not set in environment")
 
-# ─── Telegram command handler ─────────────────────────────────────────────────
+# ─── Clear any existing webhook so polling won’t conflict ──────────────────────
+bot = Bot(BOT_TOKEN)
+bot.delete_webhook()
+
+# ─── Telegram /download handler ───────────────────────────────────────────────
 def download(update: Update, context: CallbackContext):
     chat_id = update.effective_chat.id
     if not context.args:
@@ -42,15 +46,14 @@ def download(update: Update, context: CallbackContext):
         context.bot.send_video(chat_id=chat_id, video=video)
     os.remove(output)
 
-# ─── Main: start bot + dummy HTTP server ──────────────────────────────────────
+# ─── Main: start polling + dummy HTTP server ──────────────────────────────────
 def main():
-    # 1) Start Telegram bot polling
-    updater = Updater(BOT_TOKEN, use_context=True)
+    updater = Updater(bot=bot, use_context=True)
     dp = updater.dispatcher
     dp.add_handler(CommandHandler("download", download))
     updater.start_polling()
 
-    # 2) Spin up a no-op HTTP server so Railway sees a bound $PORT
+    # Spin up a no-op HTTP server so platforms like Railway (if in Web mode) see a bound $PORT
     port = int(os.environ.get("PORT", 8000))
     class NoOpHandler(BaseHTTPRequestHandler):
         def do_GET(self):
