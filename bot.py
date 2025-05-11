@@ -46,14 +46,23 @@ def download(update: Update, context: CallbackContext):
     output = "video.mp4"
     update.message.reply_text("⏳ Fetching and remuxing…")
 
+    # Bypass anti-hotlinking with proper Referer and User-Agent headers
+    headers = (
+        "Referer: https://hianime.to\r\n"
+        "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/114.0.0.0 Safari/537.36\r\n"
+    )
     cmd = [
         "ffmpeg",
         "-protocol_whitelist", "file,tls,tcp,https,crypto",
         "-allowed_extensions", "ALL",
+        "-headers", headers,
         "-i", m3u8_url,
         "-c", "copy",
         output
     ]
+
     try:
         subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     except subprocess.CalledProcessError as e:
