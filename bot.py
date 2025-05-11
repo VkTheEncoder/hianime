@@ -46,19 +46,18 @@ def download(update: Update, context: CallbackContext):
     output = "video.mp4"
     update.message.reply_text("⏳ Fetching and remuxing…")
 
-    # Real browser UA
+    # pretend to be a real browser and use referer to bypass hotlink blocks
     ua = (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/114.0.0.0 Safari/537.36"
     )
-    # Referer must match the site that hosts those TS segments
-    ref = "Referer: https://hianime.to\r\n"
+    ref = "https://hianime.to"  # the page that embeds these streams
 
     cmd = [
         "ffmpeg",
         "-user_agent", ua,
-        "-headers", ref,
+        "-referer", ref,
         "-protocol_whitelist", "file,tls,tcp,https,crypto",
         "-allowed_extensions", "ALL",
         "-i", m3u8_url,
@@ -72,7 +71,7 @@ def download(update: Update, context: CallbackContext):
             check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            timeout=300  # fail after 5 minutes if it hangs
+            timeout=300
         )
     except subprocess.TimeoutExpired:
         update.message.reply_text("❌ Download timed out.")
