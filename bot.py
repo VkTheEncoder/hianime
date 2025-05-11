@@ -8,7 +8,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # ─── Load & validate BOT_TOKEN ────────────────────────────────────────────────
 load_dotenv()
-BOT_TOKEN = os.getenv("7882374719:AAGVuPlEQL_3gM0lhGptDHdakRtG3MdnrtI")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     raise RuntimeError("BOT_TOKEN is not set in environment")
 
