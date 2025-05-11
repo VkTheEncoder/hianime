@@ -1,0 +1,19 @@
+[project]
+# (optional) a friendly name for your project
+name = "hls-telegram-bot"
+
+[phases.setup]
+# system packages you need
+packages = ["python3", "gcc", "ffmpeg"]
+
+[phases.install]
+# pip‐install your python deps into a venv
+commands = [
+  "python -m venv --copies /opt/venv",
+  "source /opt/venv/bin/activate",
+  "pip install -r requirements.txt"
+]
+
+[[start]]
+# this is what Nixpacks will run when the container launches:
+command = "python bot.py"
