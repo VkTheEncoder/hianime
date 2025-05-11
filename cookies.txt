@@ -2,7 +2,7 @@
 # http://curl.haxx.se/rfc/cookie_spec.html
 # This is a generated file!  Do not edit.
 
-.hianimez.to	TRUE	/	FALSE	1747050050	_gid	GA1.2.63538787.1746956031
+.hianimez.to	TRUE	/	FALSE	1747050878	_gid	GA1.2.63538787.1746956031
 hianimez.to	FALSE	/	FALSE	1778492032	userSettings	{%22auto_play%22:1%2C%22auto_next%22:1%2C%22auto_skip_intro%22:1%2C%22show_comments_at_home%22:1%2C%22public_watch_list%22:0%2C%22enable_dub%22:0%2C%22anime_name%22:%22en%22%2C%22play_original_audio%22:0}
 hianimez.to	FALSE	/	FALSE	1746999233	pp_main_67845425021f776b630c899590731bf0	1
 hianimez.to	FALSE	/	FALSE	1746966833	sb_main_54b536712684480f5bddc4d3fd1ac8a1	1
@@ -10,6 +10,7 @@ hianimez.to	FALSE	/	FALSE	1746966833	sb_main_54b536712684480f5bddc4d3fd1ac8a1	1
 hianimez.to	FALSE	/	FALSE	1747560834	dom3ic8zudi28v8lr6fgphwffqoz0j6c	e6c8b5c6-d1af-48bd-8045-7159f2419361%3A2%3A1
 hianimez.to	FALSE	/	FALSE	1746966892	sb_count_54b536712684480f5bddc4d3fd1ac8a1	3
 hianimez.to	FALSE	/	FALSE	1746999356	pp_sub_67845425021f776b630c899590731bf0	3
-.hianimez.to	TRUE	/	FALSE	1781523650	_ga	GA1.2.792148595.1746956031
-.hianimez.to	TRUE	/	FALSE	1781523670	_ga_R34F2GCSBW	GS2.1.s1746962452$o2$g1$t1746963669$j0$l0$h0
 hianimez.to	FALSE	/	FALSE	1746970927	watched_18168	true
+.hianimez.to	TRUE	/	FALSE	1781524479	_ga_R34F2GCSBW	GS2.1.s1746962452$o2$g1$t1746964478$j0$l0$h0
+.hianimez.to	TRUE	/	FALSE	1781524479	_ga	GA1.2.792148595.1746956031
+.hianimez.to	TRUE	/	FALSE	1746964538	_gat_gtag_UA_304498478_1	1
