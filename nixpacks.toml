@@ -1,19 +1,16 @@
+# nixpacks.toml
+
 [project]
-# (optional) a friendly name for your project
-name = "hls-telegram-bot"
+name = "hls-telegram-bot"  # optional
 
+# 1) install any OS‐level packages you need
 [phases.setup]
-# system packages you need
-packages = ["python3", "gcc", "ffmpeg"]
+nixPkgs = ["python3", "ffmpeg"]
 
+# 2) install your Python deps (into the venv Nixpacks auto-creates)
 [phases.install]
-# pip‐install your python deps into a venv
-commands = [
-  "python -m venv --copies /opt/venv",
-  "source /opt/venv/bin/activate",
-  "pip install -r requirements.txt"
-]
+cmds = ["pip install -r requirements.txt"]
 
-[[start]]
-# this is what Nixpacks will run when the container launches:
-command = "python bot.py"
+# 3) override the container start command
+[start]
+cmd = "python bot.py"
