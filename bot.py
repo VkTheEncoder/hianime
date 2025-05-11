@@ -9,8 +9,8 @@ from telegram.ext import Updater, CommandHandler, CallbackContext
 from telegram.utils.request import Request
 
 # ─── Load & validate BOT_TOKEN ────────────────────────────────────────────────
-load_dotenv()                        
-BOT_TOKEN = os.getenv("BOT_TOKEN")  
+load_dotenv()
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     raise RuntimeError("BOT_TOKEN is not set in environment")
 
@@ -46,25 +46,37 @@ def download(update: Update, context: CallbackContext):
     output = "video.mp4"
     update.message.reply_text("⏳ Fetching and remuxing…")
 
-    # Bypass anti-hotlinking with proper Referer and User-Agent headers
-    headers = (
-        "Referer: https://hianime.to\r\n"
-        "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    # Real browser UA
+    ua = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/114.0.0.0 Safari/537.36\r\n"
+        "Chrome/114.0.0.0 Safari/537.36"
     )
+    # Referer must match the site that hosts those TS segments
+    ref = "Referer: https://hianime.to\r\n"
+
     cmd = [
         "ffmpeg",
+        "-user_agent", ua,
+        "-headers", ref,
         "-protocol_whitelist", "file,tls,tcp,https,crypto",
         "-allowed_extensions", "ALL",
-        "-headers", headers,
         "-i", m3u8_url,
         "-c", "copy",
         output
     ]
 
     try:
-        subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        subprocess.run(
+            cmd,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=300  # fail after 5 minutes if it hangs
+        )
+    except subprocess.TimeoutExpired:
+        update.message.reply_text("❌ Download timed out.")
+        return
     except subprocess.CalledProcessError as e:
         err = (e.stderr or b"").decode(errors="ignore")
         logger.error(f"ffmpeg failed: {err}")
