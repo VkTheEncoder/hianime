@@ -5,12 +5,12 @@ import logging
 import glob
 from urllib.parse import urljoin, urlparse
 
+import m3u8
 from dotenv import load_dotenv
 from telegram import Bot, Update
 from telegram.ext import Updater, CommandHandler, CallbackContext
 from telegram.utils.request import Request
 from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
-import m3u8
 
 # ─── Setup & Token ────────────────────────────────────────────────────────────
 load_dotenv()
@@ -30,127 +30,137 @@ bot = Bot(token=BOT_TOKEN, request=request)
 bot.delete_webhook()
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
-def fetch_signed_hls_and_cookies(page_url: str, timeout: int = 30000):
+def fetch_playlist_and_cookies(page_url: str, timeout: int = 30000):
     """
-    Load the page in headless Chromium, wait for the .m3u8 response,
-    return (playlist_url, cookie_header, playlist_text).
+    1) Loads page_url in a headless browser
+    2) Waits for the master .m3u8 response
+    3) Returns (playlist_url, cookie_header, playlist_text)
+       but if it's a VARIANT (master) playlist, auto-fetches
+       the media playlist and returns that instead.
     """
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=True)
         ctx = browser.new_context()
         page = ctx.new_page()
 
-        # Wait for the playlist response
-        with page.expect_response("**/*.m3u8", timeout=timeout) as resp_info:
+        # Wait for the master playlist response
+        with page.expect_response("**/*.m3u8", timeout=timeout) as rsp_info:
             page.goto(page_url, timeout=timeout)
-        resp = resp_info.value
-        hls_url = resp.url
-        playlist_text = resp.text()
+        master_rsp = rsp_info.value
+        master_url = master_rsp.url
+        master_text = master_rsp.text()
 
-        # Grab cookies for that page
+        # Grab cookies
         cookies = ctx.cookies()
+
+        # If master_text is a variant playlist, fetch the first media playlist
+        playlist = m3u8.loads(master_text)
+        if playlist.is_variant:
+            variant_uri = playlist.playlists[0].uri
+            variant_url = urljoin(master_url, variant_uri)
+            variant_rsp = ctx.request.get(variant_url)
+            playlist_text = variant_rsp.text()
+            final_url = variant_url
+        else:
+            playlist_text = master_text
+            final_url = master_url
+
         browser.close()
 
-    # Build Cookie header string
-    cookie_header = "; ".join(f"{c['name']}={c['value']}" for c in cookies)
-    return hls_url, cookie_header, playlist_text
+    # Build a Cookie header string
+    cookie_header = "; ".join(
+        f"{c['name']}={c['value']}" for c in cookies if c.get("name") and c.get("value")
+    )
+    return final_url, cookie_header, playlist_text
 
 def download_segments_and_concat(hls_url: str, cookie_header: str, playlist_text: str):
     """
-    Parse the playlist_text, download each .ts segment via Playwright's request
-    API reusing the same cookies, then concat them into video.mp4.
-    Returns the output filename.
+    Given a media playlist (playlist_text) and its cookies, download each
+    TS segment via Playwright + ffmpeg concat into video.mp4.
     """
-    # Parse segment URIs
-    playlist = m3u8.loads(playlist_text)
+    # Parse the media playlist
+    pl = m3u8.loads(playlist_text)
     base = hls_url.rsplit("/", 1)[0] + "/"
-    segments = [urljoin(base, seg.uri) for seg in playlist.segments]
-    logger.info("Found %d segments", len(segments))
+    segments = [urljoin(base, seg.uri) for seg in pl.segments]
+    logger.info("Found %d ts segments", len(segments))
 
-    # Launch a new browser context to download segments
+    # Download each segment
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=True)
         ctx = browser.new_context()
-        # Inject cookies so that requests are authenticated
-        cookie_list = [
-            {
+        # Inject the cookies for the HLS host
+        host = urlparse(hls_url).hostname
+        cookie_list = []
+        for pair in cookie_header.split("; "):
+            if "=" not in pair:
+                continue
+            name, val = pair.split("=", 1)
+            cookie_list.append({
                 "name": name, "value": val,
-                "domain": urlparse(hls_url).hostname,
-                "path": "/"
-            }
-            for name, val in (pair.split("=", 1) for pair in cookie_header.split("; "))
-        ]
+                "domain": host, "path": "/"
+            })
         ctx.add_cookies(cookie_list)
-        # Download each segment
-        for i, seg_url in enumerate(segments):
-            r = ctx.request.get(seg_url)
-            data = r.body()
-            fname = f"seg{i:05d}.ts"
-            with open(fname, "wb") as f:
+
+        for idx, seg_url in enumerate(segments):
+            logger.info("Downloading segment %d/%d", idx+1, len(segments))
+            resp = ctx.request.get(seg_url)
+            data = resp.body()
+            with open(f"seg{idx:05d}.ts", "wb") as f:
                 f.write(data)
+
         browser.close()
 
-    # Create ffmpeg concat list
+    # Write ffmpeg concat file
     with open("inputs.txt", "w") as f:
-        for i in range(len(segments)):
-            f.write(f"file 'seg{i:05d}.ts'\n")
+        for idx in range(len(segments)):
+            f.write(f"file 'seg{idx:05d}.ts'\n")
 
-    # Run ffmpeg to concat
-    output = "video.mp4"
+    # Run ffmpeg to concatenate
+    out = "video.mp4"
     subprocess.run([
         "ffmpeg", "-f", "concat", "-safe", "0",
-        "-i", "inputs.txt", "-c", "copy", output
+        "-i", "inputs.txt", "-c", "copy", out
     ], check=True)
 
-    # Clean up segment files and inputs.txt
+    # Cleanup
     for fn in glob.glob("seg*.ts") + ["inputs.txt"]:
         os.remove(fn)
 
-    return output
+    return out
 
 # ─── Handlers ────────────────────────────────────────────────────────────────
 def start(update: Update, context: CallbackContext):
-    logger.info("Received /start from %s", update.effective_user.id)
     update.message.reply_text(
-        "👋 Hi! Send me:\n\n"
-        "`/download <video_page_url>`\n\n"
-        "and I’ll fetch and send you the video."
+        "👋 Hello! Send me:\n`/download <video_page_url>`\nand I'll grab the video for you."
     )
 
 def download(update: Update, context: CallbackContext):
-    args = context.args or []
-    logger.info("Received /download from %s: %r", update.effective_user.id, args)
-    if len(args) != 1:
-        return update.message.reply_text(
-            "Usage: `/download <video_page_url>`", parse_mode="Markdown"
-        )
+    if not context.args:
+        return update.message.reply_text("Usage: `/download <video_page_url>`",
+                                         parse_mode="Markdown")
 
-    page_url = args[0]
+    page_url = context.args[0]
     chat_id  = update.effective_chat.id
-    update.message.reply_text("⏳ Downloading… This may take a minute.")
+    update.message.reply_text("⏳ Starting download—this may take 30–60s…")
 
     try:
-        # Step 1: Get signed HLS + cookies + raw playlist text
-        hls_url, cookie_header, playlist_text = fetch_signed_hls_and_cookies(page_url)
-        logger.info("Got playlist URL: %s", hls_url)
+        hls_url, cookie_hdr, pl_text = fetch_playlist_and_cookies(page_url)
+        logger.info("Using playlist URL: %s", hls_url)
 
-        # Step 2: Download segments & concat into MP4
-        video_file = download_segments_and_concat(hls_url, cookie_header, playlist_text)
+        video_file = download_segments_and_concat(hls_url, cookie_hdr, pl_text)
     except PWTimeout:
-        return update.message.reply_text("❌ Timeout waiting for the player to load.")
+        return update.message.reply_text("❌ Timeout loading the player.")
     except subprocess.CalledProcessError as e:
         err = e.stderr.decode(errors="ignore") if e.stderr else str(e)
-        logger.error("ffmpeg concat failed: %s", err)
+        logger.error("ffmpeg failed: %s", err)
         return update.message.reply_text(f"❌ ffmpeg error:\n{err[:200]}")
     except Exception as e:
         logger.exception("Error in download handler")
         return update.message.reply_text(f"❌ Error: {e}")
 
-    # Step 3: Send the resulting video
     with open(video_file, "rb") as f:
         context.bot.send_video(chat_id=chat_id, video=f)
     os.remove(video_file)
-    logger.info("Sent video and cleaned up.")
 
 # ─── Main ──────────────────────────────────────────────────────────────────────
 def main():
@@ -159,10 +169,8 @@ def main():
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(CommandHandler("download", download))
 
-    logger.info("Bot is polling…")
     updater.start_polling()
     updater.idle()
-    logger.info("Bot stopped.")
 
 if __name__ == "__main__":
     main()
